@@ -13,7 +13,7 @@ A C-based implementation of file compression and decompression algorithms, creat
 
 ## Build Instruction
 ```
-gcc ./src/utils.c ./src/compress.c ./src/decompress.c  ./src/main.c -o compressor 
+gcc ./src/compress.c ./src/decompress.c ./src/utils.c ./src/main.c -o compressor 
 ```
 
 ## Usage
