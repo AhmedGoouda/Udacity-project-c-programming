@@ -23,5 +23,11 @@ gcc ./src/utils.c ./src/compress.c ./src/decompress.c  ./src/main.c -o compresso
 ./compressor -h for help
 ```
 
+### Examples
+```
+./compressor -c ./test_files/test.txt
+./compressor -d ./test_files/test.rle
+```
+
 ## Acknowledgments
 Udacity for providing the C Programming course and project guidelines.
