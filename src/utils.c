@@ -79,21 +79,21 @@ s32 open_file(const char *pc_ile_name, const char *mode, FILE **ppf_input_file)
 }
 
 /**
- * @brief Close the given file
+ * @brief Close the given file and assign NULL to its pointer
  * 
- * @param[in] p_file Pointer to the file to be closed
+ * @param[in] pp_file Pointer to the file pointer to close
  * @return s32 SUCCESS_STATUS on success, error code otherwise 
  */
-s32 close_file(FILE *p_file)
+s32 close_file(FILE **pp_file)
 {
     s32 s32_ret_val = FAILURE_STATUS;
 
-    if (NULL == p_file)
+    if (NULL == *pp_file)
     {
         LOG_ERROR("Attempted to close a NULL file pointer.");
         s32_ret_val = ERROR_NULL_POINTER;
     }
-    else if (fclose(p_file) != 0)
+    else if (fclose(*pp_file) != 0)
     {
         LOG_ERROR("Error closing file: %s", strerror(errno));
         s32_ret_val = ERROR_FILE_NOT_CLOSED;
@@ -101,6 +101,7 @@ s32 close_file(FILE *p_file)
     else
     {
         LOG("File closed successfully.");
+        *pp_file = NULL;
         s32_ret_val = SUCCESS_STATUS;
     }
 
@@ -283,6 +284,37 @@ bool check_file_exists(const char *pc_file_name)
     }
 
     return b_file_exist;
+}
+
+/**
+ * @brief  Delete the specified file
+ * 
+ * @param[in] pc_file_name Path to the file to delete
+ * @return true if file exists, false otherwise
+ */
+s32 delete_file(const char *pc_file_name)
+{
+    s32 s32_ret_val = FAILURE_STATUS;
+
+    if (NULL == pc_file_name)
+    {
+        s32_ret_val = ERROR_NULL_POINTER;
+    }
+    else
+    {
+        if (0 == remove(pc_file_name))
+        {
+            s32_ret_val == SUCCESS_STATUS;
+            LOG_INFO("File %s deleted successfully.", pc_file_name);
+        }
+        else
+        {
+            s32_ret_val = ERROR_DELETE_FILE;
+            LOG_ERROR("Error deleteing file: %s", strerror(errno));
+        }
+    }
+
+    return s32_ret_val;
 }
 
 /**

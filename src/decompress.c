@@ -152,7 +152,7 @@ s32 decompress(const char *input_file_name)
             s32_ret_val = read_file(pf_in_file, &pc_raw_data_buff, &u64_raw_data_size);
             ERROR_BREAK(s32_ret_val);
 
-            s32_ret_val = close_file(pf_in_file);
+            s32_ret_val = close_file(&pf_in_file);
             ERROR_BREAK(s32_ret_val);
 
             u64_decompressed_size = u64_raw_data_size / 2;  // best scenario of size
@@ -177,10 +177,35 @@ s32 decompress(const char *input_file_name)
             s32_ret_val = write_file(pf_out_file, pc_decompressed_buff, u64_decompressed_size);
             ERROR_BREAK(s32_ret_val);
 
+            s32_ret_val = close_file(&pf_out_file);
+            ERROR_BREAK(s32_ret_val);
+
             LOG_INFO("File decompressed successfully to: %s", pc_out_file_path);
 
         } while (0);
 
+        // Clean-up
+        if (SUCCESS_STATUS != s32_ret_val)
+        {
+            LOG_ERROR("Exit decompression loop with error code: %d", s32_ret_val);
+
+            if (NULL != pf_in_file)
+            {
+                s32_ret_val = close_file(&pf_in_file);
+            }
+
+            if (NULL != pf_out_file)
+            {
+                s32_ret_val = close_file(&pf_out_file);
+            }
+
+            if (true == check_file_exists(pc_out_file_path))
+            {
+                s32_ret_val = delete_file(pc_out_file_path);
+            }
+        }
+
+        // Free allocated memory
         free_allocated_memory(pc_raw_data_buff);
         free_allocated_memory(pc_out_file_path);
         free_allocated_memory(pc_decompressed_buff);

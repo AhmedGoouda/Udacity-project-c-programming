@@ -133,7 +133,7 @@ s32 compress(const char *input_file_name)
             s32_ret_val = read_file(pf_in_file, &pc_raw_data_buff, &u64_raw_data_size);
             ERROR_BREAK(s32_ret_val);
 
-            s32_ret_val = close_file(pf_in_file);
+            s32_ret_val = close_file(&pf_in_file);
             ERROR_BREAK(s32_ret_val);
 
 
@@ -157,7 +157,6 @@ s32 compress(const char *input_file_name)
                 break;
             }
 
-            u64 u64_time_compression_start = 
             s32_ret_val = s32_rle_compress(pc_raw_data_buff, u64_raw_data_size, pc_compressed_buff, &u64_compressed_size);
             ERROR_BREAK(s32_ret_val);
 
@@ -171,11 +170,37 @@ s32 compress(const char *input_file_name)
             s32_ret_val = write_file(pf_out_file, pc_compressed_buff, u64_compressed_size);
             ERROR_BREAK(s32_ret_val);
 
+            s32_ret_val = close_file(&pf_out_file);
+            ERROR_BREAK(s32_ret_val);
+
             LOG_INFO("File compressed successfully to: %s", pc_out_file_path);
 
         } while (0);
 
+        // Clean-up
+        if (SUCCESS_STATUS != s32_ret_val)
+        {
+            LOG_ERROR("Exit compression loop with error code: %d", s32_ret_val);
 
+            if (NULL != pf_in_file)
+            {
+                s32_ret_val = close_file(&pf_in_file);
+                LOG_INFO("Close pf_in_file: %d", s32_ret_val);
+            }
+
+            if (NULL != pf_out_file)
+            {
+                s32_ret_val = close_file(&pf_out_file);
+                LOG_INFO("Close pf_out_file: %d", s32_ret_val);
+            }
+
+            if (true == check_file_exists(pc_out_file_path))
+            {
+                s32_ret_val = delete_file(pc_out_file_path);
+            }
+        }
+
+        // Free allocated memory
         free_allocated_memory(pc_raw_data_buff);
         free_allocated_memory(pc_out_file_path);
         free_allocated_memory(pc_compressed_buff);
