@@ -44,26 +44,24 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
             {
                 u64_char_count++;
             }
-            else if ('\n' == pc_input_data[i])
-            {
-                pc_output_data[u64_write_idx++] = pc_input_data[i];
-                u64_char_count = 1;
-            }
-            else if (' ' == pc_input_data[i])
-            {
-                pc_output_data[u64_write_idx++] = pc_input_data[i];
-                u64_char_count = 1;
-            }
             else
             {
-                pc_output_data[u64_write_idx] = pc_input_data[i];
-                u64_write_idx++;
+                if ('\n' == pc_input_data[i])
+                {
+                    pc_output_data[u64_write_idx++] = '\\';
+                    pc_output_data[u64_write_idx++] = 'n';
+                }
+                else
+                {
+                    pc_output_data[u64_write_idx++] = pc_input_data[i];
+                }
 
                 memset(ac_char_count_str, 0, sizeof(ac_char_count_str));
                 snprintf(ac_char_count_str, sizeof(ac_char_count_str), "%lu", u64_char_count);
 
                 strncpy(&pc_output_data[u64_write_idx], ac_char_count_str, strlen(ac_char_count_str));
                 u64_write_idx += strlen(ac_char_count_str);
+                pc_output_data[u64_write_idx] = '\0';
 
                 u64_char_count = 1;
             }
