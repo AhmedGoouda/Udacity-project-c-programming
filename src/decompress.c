@@ -13,7 +13,7 @@
  * @param[in] pc_input_data Input data to be decompressed
  * @param[in] u64_input_data_size Size of the input data
  * @param[in] pc_output_data Buffer to hold the decompressed output data
- * @param[in] pu64_output_data_size Pointer to hold the size of the decompressed data
+ * @param[in out] pu64_output_data_size Pointer to hold the size of the decompressed data
  * @return s32 SUCCESS_STATUS on success, error code otherwise 
  */
 static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_data_size, char *pc_output_data, u64 *pu64_output_data_size)
@@ -54,7 +54,27 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
                 }
             }
 
-            non_digit_char = pc_input_data[i];
+            if ('\\' == pc_input_data[i] && (i + 1) < u64_input_data_size)
+            {
+                if ('n' == pc_input_data[i + 1])
+                {
+                    non_digit_char = '\n';
+                }
+                else if ('t' == pc_input_data[i + 1])
+                {
+                    non_digit_char = '\t';
+                }
+                else
+                {
+                    non_digit_char = '\\';
+                }
+                i++; // Skip the next character as it's part of the escape sequence
+            }
+            else
+            {
+                non_digit_char = pc_input_data[i];
+            }
+
             pc_output_data[u64_write_idx++] = non_digit_char;
 
             i++;
