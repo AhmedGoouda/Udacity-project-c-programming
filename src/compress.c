@@ -1,4 +1,3 @@
-/* Include any necessary libraries and header files */
 #include<stdlib.h>
 #include <stdint.h>
 #include <errno.h>
@@ -39,7 +38,6 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
         char ac_char_count_str[20] = {0}; // Buffer to hold string representation of count
 
         char *pc_output_data_shadow = pc_output_data; // Shadow pointer to free in case of realloc failure
-
         
         for (u64 i = 0; i < u64_input_data_size; i++)
         {

@@ -1,4 +1,3 @@
-/* Include any necessary libraries and header files */
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
