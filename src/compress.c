@@ -37,6 +37,9 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
         u64 u64_write_idx = 0;
         u64 u64_char_count = 1;
         char ac_char_count_str[20] = {0}; // Buffer to hold string representation of count
+
+        char *pc_output_data_shadow = pc_output_data; // Shadow pointer to free in case of realloc failure
+
         
         for (u64 i = 0; i < u64_input_data_size; i++)
         {
@@ -49,6 +52,7 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
                 if (*pu64_output_data_size <= (u64_write_idx + 2 + sizeof(ac_char_count_str)))
                 {
                     LOG("Reallocating memory for compression buffer.");
+
                     *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
                     pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
 
@@ -56,6 +60,8 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
                     {
                         LOG_ERROR("Error reallocating memory for compression buffer: %s", strerror(errno));
                         s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
+                        free(pc_output_data_shadow);
+                        pc_output_data_shadow = NULL;
                         break;
                     }
                 }
@@ -85,17 +91,30 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
                 u64_char_count = 1;
             }
         }
-        *pu64_output_data_size = u64_write_idx;
 
-        LOG("Reallocating compression buffer to the actual compressed size.");
-        pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
-        if (NULL == pc_output_data)
+        if (SUCCESS_STATUS != s32_ret_val)
         {
-            LOG_ERROR("Error reallocating memory to the actual compressed size: %s", strerror(errno));
-            s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
+            LOG_ERROR("RLE Compression failed with error code: %d", s32_ret_val);
         }
+        else
+        {
+            *pu64_output_data_size = u64_write_idx;
 
-        LOG("RLE Compression successful. Compressed size: %lu bytes", *pu64_output_data_size);
+            LOG("Reallocating compression buffer to the actual compressed size.");
+
+            pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
+            if (NULL == pc_output_data)
+            {
+                LOG_ERROR("Error reallocating memory to the actual compressed size: %s", strerror(errno));
+                s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
+                free(pc_output_data_shadow);
+                pc_output_data_shadow = NULL;
+            }
+            else
+            {
+                LOG("RLE Compression successful. Compressed size: %lu bytes", *pu64_output_data_size);
+            }
+        }
     }
 
     return s32_ret_val;

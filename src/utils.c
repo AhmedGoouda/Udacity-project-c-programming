@@ -140,6 +140,7 @@ s32 read_file(FILE *p_file, char **ppc_read_data_buff, u64 *pu64_read_data_size)
         else
         {
             size_t read_bytes_count = 0;
+            char *pc_read_data_buff_shadow = *ppc_read_data_buff; // Shadow pointer to free in case of realloc failure
 
             while (1)
             {
@@ -159,6 +160,8 @@ s32 read_file(FILE *p_file, char **ppc_read_data_buff, u64 *pu64_read_data_size)
                     {
                         LOG_ERROR("Error reallocating memory for read data buffer: %s", strerror(errno));
                         s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
+                        free(pc_read_data_buff_shadow);
+                        pc_read_data_buff_shadow = NULL;
                         break;
                     }
                     else
@@ -171,12 +174,19 @@ s32 read_file(FILE *p_file, char **ppc_read_data_buff, u64 *pu64_read_data_size)
                 {
                     LOG_ERROR("Error reading file: %s", strerror(errno));
                     s32_ret_val = ERROR_FILE_READ_FAILED;
-                    free_allocated_memory(*ppc_read_data_buff);
+
+                    if (NULL != *ppc_read_data_buff)
+                    {
+                        free(*ppc_read_data_buff);
+                        *ppc_read_data_buff = NULL;
+                    }
+
                     break;
                 }
                 else if (feof(p_file))
                 {
                     LOG("End of file reached. Read %zu bytes successfully.", *pu64_read_data_size);
+                    s32_ret_val = SUCCESS_STATUS;
                     break;
                 }
                 else
@@ -185,25 +195,25 @@ s32 read_file(FILE *p_file, char **ppc_read_data_buff, u64 *pu64_read_data_size)
                 }
             }
 
-            if ((*pu64_read_data_size < read_size) && (0 != *pu64_read_data_size))
+            if (SUCCESS_STATUS == s32_ret_val)
             {
-                LOG("Reallocating buffer to the actual size read.");
-                *ppc_read_data_buff = (char *)realloc(*ppc_read_data_buff, *pu64_read_data_size);
-
-                if (NULL == *ppc_read_data_buff)
+                if ((*pu64_read_data_size < read_size) && (0 != *pu64_read_data_size))
                 {
-                    LOG_ERROR("Error reallocating memory to the actual size read: %s", strerror(errno));
-                    s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
-                }
-            }
+                    LOG("Reallocating buffer to the actual size read.");
+                    *ppc_read_data_buff = (char *)realloc(*ppc_read_data_buff, *pu64_read_data_size);
 
-            if (ERROR_FILE_READ_FAILED == s32_ret_val || ERROR_MEMORY_ALLOCATION_FAILED == s32_ret_val)
-            {
-                free_allocated_memory(*ppc_read_data_buff);
+                    if (NULL == *ppc_read_data_buff)
+                    {
+                        LOG_ERROR("Error reallocating memory to the actual size read: %s", strerror(errno));
+                        s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
+                        free(pc_read_data_buff_shadow);
+                        pc_read_data_buff_shadow = NULL;
+                    }
+                }
             }
             else
             {
-                s32_ret_val = SUCCESS_STATUS;
+                LOG_ERROR("Read file failed with error code: %d", s32_ret_val);
             }
         }
     }

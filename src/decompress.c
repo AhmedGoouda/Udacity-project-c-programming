@@ -38,22 +38,10 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
         u64 u64_char_cnt = 0;
         u64 u64_write_idx = 0;
 
+        char *pc_output_data_shadow = pc_output_data; // Shadow pointer to free in case of realloc failure
+
         for (u64 i = 0; i < u64_input_data_size; i++)
         {
-            if (*pu64_output_data_size == u64_write_idx)
-            {
-                LOG("Reallocating memory for decompression buffer.");
-                *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
-                pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
-
-                if (NULL == pc_output_data)
-                {
-                    LOG_ERROR("Error reallocating memory for decompression buffer: %s", strerror(errno));
-                    s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
-                    break;
-                }
-            }
-
             if ('\\' == pc_input_data[i] && (i + 1) < u64_input_data_size)
             {
                 if ('n' == pc_input_data[i + 1])
@@ -92,38 +80,52 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
             u8_char_cnt_str_idx = 0;
             memset(ac_char_cnt_string, 0, sizeof(ac_char_cnt_string));
 
+            if (*pu64_output_data_size <= (u64_write_idx + u64_char_cnt + 1))
+            {
+                LOG("Reallocating memory for decompression buffer.");
+
+                *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
+                pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
+
+                if (NULL == pc_output_data)
+                {
+                    LOG_ERROR("Error reallocating memory for decompression buffer: %s", strerror(errno));
+                    s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
+                    free(pc_output_data_shadow);
+                    pc_output_data_shadow = NULL;
+                    break;
+                }
+            }
+
             for (u64 j = 1; j < u64_char_cnt; j++)
             {
-                if (*pu64_output_data_size == u64_write_idx)
-                {
-                    LOG("Reallocating memory for decompression buffer.");
-                    *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
-                    pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
-
-                    if (NULL == pc_output_data)
-                    {
-                        LOG_ERROR("Error reallocating memory for decompression buffer: %s", strerror(errno));
-                        s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
-                        break;
-                    }
-                }
-
                 pc_output_data[u64_write_idx++] = non_digit_char;
-
             }
-            ERROR_BREAK(s32_ret_val);
         }
-        *pu64_output_data_size = u64_write_idx;
 
-        LOG("Reallocating decompression buffer to the actual decompressed size.");
-        pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
-        if (NULL == pc_output_data)
+        if (SUCCESS_STATUS != s32_ret_val)
         {
-            LOG_ERROR("Error reallocating memory to the actual decompressed size: %s", strerror(errno));
-            s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
+            LOG_ERROR("RLE Decompression failed with error code: %d", s32_ret_val);
         }
+        else
+        {
+            *pu64_output_data_size = u64_write_idx;
 
-        LOG("RLE Decompression successful. Decompressed size: %lu bytes", *pu64_output_data_size);
+            LOG("Reallocating decompression buffer to the actual decompressed size.");
+
+            pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
+            if (NULL == pc_output_data)
+            {
+                LOG_ERROR("Error reallocating memory to the actual decompressed size: %s", strerror(errno));
+                s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
+                free(pc_output_data_shadow);
+                pc_output_data_shadow = NULL;
+            }
+            else
+            {
+                LOG("RLE Decompression successful. Decompressed size: %lu bytes", *pu64_output_data_size);
+            }
+        }
     }
 
     return s32_ret_val;
