@@ -64,6 +64,10 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
                 {
                     non_digit_char = '\t';
                 }
+                else if (pc_input_data[i + 1] >= '0' && pc_input_data[i + 1] <= '9')
+                {
+                    non_digit_char = pc_input_data[i + 1];
+                }
                 else
                 {
                     non_digit_char = '\\';

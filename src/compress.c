@@ -46,10 +46,29 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
             }
             else
             {
+                if (*pu64_output_data_size <= (u64_write_idx + 2 + sizeof(ac_char_count_str)))
+                {
+                    LOG("Reallocating memory for compression buffer.");
+                    *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
+                    pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
+
+                    if (NULL == pc_output_data)
+                    {
+                        LOG_ERROR("Error reallocating memory for compression buffer: %s", strerror(errno));
+                        s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
+                        break;
+                    }
+                }
+
                 if ('\n' == pc_input_data[i])
                 {
                     pc_output_data[u64_write_idx++] = '\\';
                     pc_output_data[u64_write_idx++] = 'n';
+                }
+                else if (pc_input_data[i] >= '0' && pc_input_data[i] <= '9')
+                {
+                    pc_output_data[u64_write_idx++] = '\\';
+                    pc_output_data[u64_write_idx++] = pc_input_data[i];
                 }
                 else
                 {
