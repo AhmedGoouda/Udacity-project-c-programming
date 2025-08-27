@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include <errno.h>
 #include <string.h>
-#include <time.h>
 
 #include "../header_files/utils.h"
 #include "../header_files/compress.h"
@@ -35,6 +34,7 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
 
         u64 u64_write_idx = 0;
         u64 u64_char_count = 1;
+        u64 u64_needed_size = 0; // Variable to hold needed size for realloc checks
         char ac_char_count_str[20] = {0}; // Buffer to hold string representation of count
 
         char *pc_output_data_shadow = pc_output_data; // Shadow pointer to free in case of realloc failure
@@ -47,21 +47,32 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
             }
             else
             {
-                if (*pu64_output_data_size <= (u64_write_idx + 2 + sizeof(ac_char_count_str)))
+                u64_needed_size = u64_write_idx + 2 + sizeof(ac_char_count_str); // 2 for possible escape characters
+
+                if ((u64_needed_size / 2) < UINT32_MAX)
                 {
-                    LOG("Reallocating memory for compression buffer.");
-
-                    *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
-                    pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
-
-                    if (NULL == pc_output_data)
+                    if (u64_needed_size >= *pu64_output_data_size)
                     {
-                        LOG_ERROR("Error reallocating memory for compression buffer: %s", strerror(errno));
-                        s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
-                        free(pc_output_data_shadow);
-                        pc_output_data_shadow = NULL;
-                        break;
+                        LOG("Reallocating memory for compression buffer.");
+
+                        *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
+                        pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
+
+                        if (NULL == pc_output_data)
+                        {
+                            LOG_ERROR("Error reallocating memory for compression buffer: %s", strerror(errno));
+                            s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
+                            free(pc_output_data_shadow);
+                            pc_output_data_shadow = NULL;
+                            break;
+                        }
                     }
+                }
+                else
+                {
+                    LOG_ERROR("Output data size is too large.");
+                    s32_ret_val = ERROR_INVALID_LENGTH;
+                    break;
                 }
 
                 if ('\n' == pc_input_data[i])

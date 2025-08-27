@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <stdint.h>
 
 #include "../header_files/utils.h"
 #include "../header_files/decompress.h"
@@ -36,6 +37,7 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
         u8 u8_char_cnt_str_idx = 0;
         u64 u64_char_cnt = 0;
         u64 u64_write_idx = 0;
+        u64 u64_needed_size = 0; // Variable to hold needed size for realloc checks
 
         char *pc_output_data_shadow = pc_output_data; // Shadow pointer to free in case of realloc failure
 
@@ -79,21 +81,32 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
             u8_char_cnt_str_idx = 0;
             memset(ac_char_cnt_string, 0, sizeof(ac_char_cnt_string));
 
-            if (*pu64_output_data_size <= (u64_write_idx + u64_char_cnt + 1))
+            u64_needed_size = u64_write_idx + u64_char_cnt + 1; // +1 for the already written character
+
+            if ((u64_needed_size / 2) < UINT32_MAX)
             {
-                LOG("Reallocating memory for decompression buffer.");
-
-                *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
-                pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
-
-                if (NULL == pc_output_data)
+                if (u64_needed_size >= *pu64_output_data_size)
                 {
-                    LOG_ERROR("Error reallocating memory for decompression buffer: %s", strerror(errno));
-                    s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
-                    free(pc_output_data_shadow);
-                    pc_output_data_shadow = NULL;
-                    break;
+                    LOG("Reallocating memory for decompression buffer.");
+
+                    *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
+                    pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
+
+                    if (NULL == pc_output_data)
+                    {
+                        LOG_ERROR("Error reallocating memory for decompression buffer: %s", strerror(errno));
+                        s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
+                        free(pc_output_data_shadow);
+                        pc_output_data_shadow = NULL;
+                        break;
+                    }
                 }
+            }
+            else
+            {
+                LOG_ERROR("Output data size is too large.");
+                s32_ret_val = ERROR_INVALID_LENGTH;
+                break;
             }
 
             for (u64 j = 1; j < u64_char_cnt; j++)
