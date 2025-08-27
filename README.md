@@ -1,6 +1,9 @@
 # File Compression & Decompression in C
 A C-based implementation of file compression and decompression algorithms, created as a project requirement for Udacity’s C Programming course.
 
+> **Note:** This project was created solely for educational purposes as part of Udacity's C Programming course.  
+> Unauthorized copying, reuse, or redistribution of this code is prohibited.
+
 ## Features
 - Compresses files using Run-Length Encoding (RLE) algorithm.
 - Decompresses files to their original format.
@@ -28,6 +31,10 @@ gcc ./src/compress.c ./src/decompress.c ./src/utils.c ./src/main.c -o compressor
 ./compressor -c ./test_files/test.txt
 ./compressor -d ./test_files/test.rle
 ```
+
+## License
+This project is **not licensed** for reuse or redistribution.  
+
 
 ## Acknowledgments
 Udacity for providing the C Programming course and project guidelines.
