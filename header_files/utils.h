@@ -83,12 +83,12 @@ void log_message(tenu_log_level enu_log_level, const char *pc_formatted_msg, ...
 s32 open_file(const char *pc_ile_name, const char *mode, FILE **ppf_input_file);
 
 /**
- * @brief Close the given file
+ * @brief Close the given file and assign NULL to its pointer
  * 
- * @param[in] p_file Pointer to the file to be closed
+ * @param[in] pp_file Pointer to the file pointer to close
  * @return s32 SUCCESS_STATUS on success, error code otherwise 
  */
-s32 close_file(FILE *p_file);
+s32 close_file(FILE **pp_file);
 
 /**
  * @brief 
@@ -117,6 +117,14 @@ s32 write_file(FILE *p_file, const char *pc_write_buffer, const u64 u64_write_si
  * @return true if file exists, false otherwise
  */
 bool check_file_exists(const char *pc_file_name);
+
+/**
+ * @brief  Delete the specified file
+ * 
+ * @param[in] pc_file_name Path to the file to delete
+ * @return true if file exists, false otherwise
+ */
+s32 delete_file(const char *pc_file_name);
 
 /**
  * @brief Get the file basename object

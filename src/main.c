@@ -1,4 +1,3 @@
-/* Include any necessary libraries and header files */
 #include "../header_files/constants.h"
 #include "../header_files/utils.h"
 #include "../header_files/compress.h"
