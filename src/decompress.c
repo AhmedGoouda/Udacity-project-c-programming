@@ -83,7 +83,7 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
 
             u64_needed_size = u64_write_idx + u64_char_cnt + 1; // +1 for the already written character
 
-            if ((u64_needed_size / 2) < UINT32_MAX)
+            if ((u64_needed_size + *pu64_output_data_size + DATA_CHUNK_SIZE_BYTES) < UINT64_MAX)
             {
                 if (u64_needed_size >= *pu64_output_data_size)
                 {
@@ -184,16 +184,35 @@ s32 decompress(const char *input_file_name)
                 break;
             }
 
-            s32_ret_val = open_file(input_file_name, "r", &pf_in_file);
-            ERROR_BREAK(s32_ret_val);
+            if (true == check_file_exists(input_file_name))
+            {
+                s32_ret_val = open_file(input_file_name, "r", &pf_in_file);
+                ERROR_BREAK(s32_ret_val);
 
-            s32_ret_val = read_file(pf_in_file, &pc_raw_data_buff, &u64_raw_data_size);
-            ERROR_BREAK(s32_ret_val);
+                s32_ret_val = read_file(pf_in_file, &pc_raw_data_buff, &u64_raw_data_size);
+                ERROR_BREAK(s32_ret_val);
 
-            s32_ret_val = close_file(&pf_in_file);
-            ERROR_BREAK(s32_ret_val);
+                s32_ret_val = close_file(&pf_in_file);
+                ERROR_BREAK(s32_ret_val);
+            }
+            else
+            {
+                LOG_ERROR("Input file does not exist: %s", input_file_name);
+                s32_ret_val = ERROR_FILE_NOT_FOUND;
+                break;
+            }
 
-            u64_decompressed_size = u64_raw_data_size / 2;  // best scenario of size
+            if (0 == u64_raw_data_size)
+            {
+                LOG_ERROR("Input file is empty.");
+                s32_ret_val = ERROR_EMPTY_FILE;
+                break;
+            }
+            else
+            {
+                u64_decompressed_size = u64_raw_data_size / 2;  // best scenario of size
+            }
+
             pc_decompressed_buff = (char *)malloc(u64_decompressed_size);
 
             if (NULL == pc_decompressed_buff)
@@ -237,9 +256,12 @@ s32 decompress(const char *input_file_name)
                 s32_ret_val = close_file(&pf_out_file);
             }
 
-            if (true == check_file_exists(pc_out_file_path))
+            if (NULL != pc_out_file_path)
             {
-                s32_ret_val = delete_file(pc_out_file_path);
+                if (true == check_file_exists(pc_out_file_path))
+                {
+                    s32_ret_val = delete_file(pc_out_file_path);
+                }
             }
         }
 

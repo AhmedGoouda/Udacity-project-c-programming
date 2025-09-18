@@ -49,7 +49,7 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
             {
                 u64_needed_size = u64_write_idx + 2 + sizeof(ac_char_count_str); // 2 for possible escape characters
 
-                if ((u64_needed_size / 2) < UINT32_MAX)
+                if (u64_needed_size + *pu64_output_data_size + DATA_CHUNK_SIZE_BYTES < UINT64_MAX)
                 {
                     if (u64_needed_size >= *pu64_output_data_size)
                     {
@@ -172,17 +172,31 @@ s32 compress(const char *input_file_name)
                 break;
             }
 
-            s32_ret_val = open_file(input_file_name, "r", &pf_in_file);
-            ERROR_BREAK(s32_ret_val);
+            if (true == check_file_exists(input_file_name))
+            {
+                s32_ret_val = open_file(input_file_name, "r", &pf_in_file);
+                ERROR_BREAK(s32_ret_val);
 
-            s32_ret_val = read_file(pf_in_file, &pc_raw_data_buff, &u64_raw_data_size);
-            ERROR_BREAK(s32_ret_val);
+                s32_ret_val = read_file(pf_in_file, &pc_raw_data_buff, &u64_raw_data_size);
+                ERROR_BREAK(s32_ret_val);
 
-            s32_ret_val = close_file(&pf_in_file);
-            ERROR_BREAK(s32_ret_val);
+                s32_ret_val = close_file(&pf_in_file);
+                ERROR_BREAK(s32_ret_val);
+            }
+            else
+            {
+                LOG_ERROR("Input file does not exist: %s", input_file_name);
+                s32_ret_val = ERROR_FILE_NOT_FOUND;
+                break;
+            }
 
-
-            if ((u64_raw_data_size / 2) < UINT32_MAX)
+            if (0 == u64_raw_data_size)
+            {
+                LOG_ERROR("Input file is empty.");
+                s32_ret_val = ERROR_EMPTY_FILE;
+                break;
+            }
+            else if (u64_raw_data_size <= UINT64_MAX / 2)
             {
                 u64_max_compressed_size = 2 * u64_raw_data_size; // Worst case scenario
             }
@@ -239,9 +253,12 @@ s32 compress(const char *input_file_name)
                 LOG_INFO("Close pf_out_file: %d", s32_ret_val);
             }
 
-            if (true == check_file_exists(pc_out_file_path))
+            if (NULL != pc_out_file_path)
             {
-                s32_ret_val = delete_file(pc_out_file_path);
+                if (true == check_file_exists(pc_out_file_path))
+                {
+                    s32_ret_val = delete_file(pc_out_file_path);
+                }
             }
         }
 
