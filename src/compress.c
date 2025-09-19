@@ -85,6 +85,11 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
                     pc_output_data[u64_write_idx++] = '\\';
                     pc_output_data[u64_write_idx++] = pc_input_data[i];
                 }
+                else if (pc_input_data[i] == '\\')
+                {
+                    pc_output_data[u64_write_idx++] = '\\';
+                    pc_output_data[u64_write_idx++] = '\\';
+                }
                 else
                 {
                     pc_output_data[u64_write_idx++] = pc_input_data[i];
