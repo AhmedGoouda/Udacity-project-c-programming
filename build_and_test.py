@@ -8,11 +8,15 @@ the functionality, and provides detailed feedback on any failures.
 It supports different validation modes for certain tests and allows
 users to keep or discard temporary files after the tests.
 
+It also generates a summary report of the test results if requested.
+And by default, it generates a separate report for failed tests.
+
 Usage:
     python build_and_test.py [options]
 Options:
     -s, --suite <number>       Run a specific test suite (0-4).
     -v, --validation-mode      Set validation mode for UI tests: 'strict' (default) or 'warn'.
+    -r, --report               Generate a detailed test report.
     -k, --keep-files           Keep all temporary files after the run.
     -l, --list-tests           List available test suites and exit.
     -h, --help                 Show this help message and exit.
@@ -20,6 +24,7 @@ Examples:
     python build_and_test.py
     python build_and_test.py -s 1 -v warn -k
     python build_and_test.py --list-tests
+    python build_and_test.py -r
 Notes:
     - Ensure that 'gcc' is installed and available in your system's PATH.
     - The C source files should be located in the 'src/' directory.
@@ -36,12 +41,16 @@ import glob
 import argparse
 import re
 from typing import Callable
+from datetime import datetime
+from collections import defaultdict
 
 # --- Configuration ---
 C_EXECUTABLE          = "./compressor"
 SOURCE_DIR            = "./src/"
 SOURCE_TEST_FILES_DIR = "./test_files/"
 TEMP_WORK_DIR         = "./temp_test_run/"
+REPORT_FILE           = "test_report.txt"
+FAILURE_REPORT_FILE   = "failed_test_report.txt"
 
 # --- Color Constants for Output ---
 class Colors:
@@ -110,7 +119,7 @@ def sanitize_for_test_case_path(text: str) -> str:
     text = text.replace(' ', '_').replace('/', '_').replace('(', '').replace(')', '')
     return re.sub(r'[^a-zA-Z0-9_-]', '', text)
 
-def run_test_case(description: str, test_logic_func: Callable[..., bool], keep_all_files: bool=False) -> bool:
+def run_test_case(description: str, test_logic_func: Callable[..., bool], keep_all_files: bool=False) -> dict:
     """
     A generic test case runner that creates a unique subdirectory for each test
     and cleans up only on success.
@@ -125,38 +134,42 @@ def run_test_case(description: str, test_logic_func: Callable[..., bool], keep_a
     os.makedirs(case_work_dir)
     
     test_passed = FAILED
+    result_details = ""
+    
     try:
         result_tuple = test_logic_func(case_work_dir)
         test_passed = result_tuple[0]
         
         if test_passed == PASSED:
             print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-            return PASSED
         else:
             failure_message = result_tuple[1]
             # Check for optional file paths for diagnosis
             if len(result_tuple) == 4:
                 golden_path, generated_path = result_tuple[2], result_tuple[3]
                 diagnosis = diagnose_failure(golden_path, generated_path)
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: {failure_message}\n      -> Diagnosis: {diagnosis}")
+                result_details = f"{failure_message}\n      -> Diagnosis: {diagnosis}"
             else:
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: {failure_message}")
-            return FAILED
+                result_details = failure_message
+            print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: {failure_message}")
         
     except subprocess.TimeoutExpired as e:
         print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: The C program timed out after {e.timeout} seconds (likely an infinite loop).")
-        return FAILED
     except subprocess.CalledProcessError as e:
         print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: The C program crashed or returned an unexpected error (Exit Code {e.returncode}).")
         if e.stderr:
             print(f"      -> Stderr: {e.stderr.strip()}")
-        return FAILED
     except Exception as e:
         print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: An unexpected error occurred in the Python test script: {e}")
-        return FAILED
     finally:
         if test_passed and not keep_all_files:
             shutil.rmtree(case_work_dir)
+    
+    return {
+        "description": description,
+        "status": "PASS" if test_passed else "FAIL",
+        "details": result_details
+    }
 
 def cleanup_temp_dirs() -> None:
     """Removes the top-level temporary directory if it's empty."""
@@ -166,25 +179,67 @@ def cleanup_temp_dirs() -> None:
     except OSError:
         pass
 
+def generate_report(all_results: list[dict], overall_summary: dict, report_file: str=REPORT_FILE) -> None:
+    """Generates a text file report from the collected test results."""
+    print(f"\nGenerating test report to '{report_file}'...")
+    with open(report_file, "w") as f:
+        f.write("======================================\n")
+        f.write("         Test Automation Report         \n")
+        f.write("======================================\n\n")
+        f.write(f"Run Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        
+        f.write("--- Overall Summary ---\n")
+        f.write(f"Total Suites Run: {overall_summary['passed'] + overall_summary['failed']  + overall_summary['skipped']}\n")
+        f.write(f"Suites Passed: {overall_summary['passed']}\n")
+        f.write(f"Suites Failed: {overall_summary['failed']}\n")
+        f.write(f"Suites Skipped: {overall_summary['skipped']}\n")
+        f.write("-----------------------\n\n")
+
+        # Group results by suite
+        grouped_results = defaultdict(list)
+        for res in all_results:
+            grouped_results[res['suite']].append(res)
+
+        for suite_name, cases in grouped_results.items():
+            f.write(f"--- {suite_name} ---\n")
+            for case in cases:
+                f.write(f"  [{case['status']}] {case['description']}\n")
+                if case['status'] == 'FAIL':
+                    # Indent details for readability
+                    indented_details = "\n".join([f"    -> {line.strip()}" for line in case['details'].split('\n')])
+                    f.write(f"{indented_details}\n")
+            f.write("\n")
+    print("Report generation complete.")
+
 # =====================================================================
 #  TEST SUITE IMPLEMENTATIONS
 # =====================================================================
+def run_suite(suite_name: str, test_cases: list[Callable[..., bool]], keep_files_flag: bool) -> tuple[bool, list[dict]]:
+    """A generic function to run a list of test cases for a suite."""
+    suite_results = []
+    for desc, logic in test_cases:
+        result = run_test_case(desc, logic, keep_files_flag)
+        result['suite'] = suite_name
+        suite_results.append(result)
+    
+    suite_passed = all(res['status'] == 'PASS' for res in suite_results)
+    return suite_passed, suite_results
 
 # =====================================================================
 #  SUITE 0: SHOW HELP MESSAGE
 # =====================================================================
-def run_show_help_suite(golden_help_message: str) -> bool:
+def run_show_help_suite(golden_help_message: str) -> tuple[bool, list[dict]]:
     """SUITE 0: Prints the captured help message for visual inspection."""
     print("  -> Displaying the captured output of './compressor -h':\n")
     print("---------- Program Help Output ----------")
     print(golden_help_message)
     print("---------------------------------------")
-    return PASSED
+    return PASSED, [{"suite": "Suite 0: Show Help Message", "description": "Show Help Message", "status": "PASS", "details": ""}]
 
 # =====================================================================
 #  SUITE 1: USER INTERFACE & INPUT HANDLING TESTS
 # =====================================================================
-def run_ui_and_input_tests(golden_help_message: str, validation_mode: str, keep_files_flag: bool) -> bool:
+def run_ui_and_input_tests(golden_help_message: str, validation_mode: str, keep_files_flag: bool) -> tuple[bool, list[dict]]:
     """SUITE 1: Runs tests for invalid arguments, non-existent files, and other user input errors."""
     
     def test_bad_args_prints_usage(args_to_test, work_dir): # work_dir is unused but required by the interface of run_test_case
@@ -321,13 +376,9 @@ def run_ui_and_input_tests(golden_help_message: str, validation_mode: str, keep_
         (f"Testing wrong file extension for decompression (mode: {validation_mode})", lambda work_dir: test_wrong_extension_for_decompression(work_dir, validation_mode)),
     ]
     
-    overall_success = True
-    for desc, logic in ui_tests:
-        if not run_test_case(desc, logic, keep_files_flag):
-            overall_success = False
-    return overall_success
+    return run_suite("Suite 1: User Interface & Input Handling", ui_tests, keep_files_flag)
 
-def run_output_file_naming_tests(keep_files_flag: bool) -> bool:
+def run_output_file_naming_tests(keep_files_flag: bool) -> tuple[bool, list[dict]]:
     """SUITE 2: Runs all feature-specific tests related to file naming conflicts."""
     
     def test_single_comp_conflict(work_dir):
@@ -377,17 +428,13 @@ def run_output_file_naming_tests(keep_files_flag: bool) -> bool:
         ("Testing multiple decompression conflicts (_10.txt)", test_multi_decomp_conflict),
     ]
     
-    overall_success = True
-    for desc, logic in file_naming_tests:
-        if not run_test_case(desc, logic, keep_files_flag):
-            overall_success = False
-    return overall_success
+    return run_suite("Suite 2: Output File Naming", file_naming_tests, keep_files_flag)
 
-def run_decoupled_correctness_tests(keep_files_flag: bool) -> bool|None:
+def run_decoupled_correctness_tests(keep_files_flag: bool) -> tuple[bool|None, list[dict]]:
     """SUITE 3: Runs decoupled tests for compression and decompression against known-good files."""
     
     tests_found = 0
-    overall_success = True
+    test_cases = []
 
     # Find all .txt files and check for corresponding .rle files for compression test
     txt_files = [f for f in os.listdir(SOURCE_TEST_FILES_DIR) if f.endswith('.txt')]
@@ -398,23 +445,24 @@ def run_decoupled_correctness_tests(keep_files_flag: bool) -> bool|None:
         if not os.path.exists(os.path.join(SOURCE_TEST_FILES_DIR, rle_filename)): continue
         
         tests_found += 1
-        def comp_test_logic(work_dir):
-            shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, txt_filename), work_dir)
-            shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, rle_filename), work_dir)
-            subprocess.run([C_EXECUTABLE, "-c", os.path.join(work_dir, txt_filename)], check=True, capture_output=True, text=True, timeout=10)
-            program_output = os.path.join(work_dir, base_name + "_1.rle")
-            golden_file = os.path.join(work_dir, rle_filename)
-            
-            if not os.path.exists(program_output):
-                return(FAILED, f"Program did not create an output file.")
-            
-            if not filecmp.cmp(program_output, golden_file, shallow=False):
-                return (FAILED, "Output does not match known-good .rle file.", golden_file, program_output)
-            
-            return (PASSED,)
+        def create_comp_test_logic(txt_filename, rle_filename, base_name):
+            def comp_test_logic(work_dir):
+                shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, txt_filename), work_dir)
+                shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, rle_filename), work_dir)
+                subprocess.run([C_EXECUTABLE, "-c", os.path.join(work_dir, txt_filename)], check=True, capture_output=True, text=True, timeout=10)
+                program_output = os.path.join(work_dir, base_name + "_1.rle")
+                golden_file = os.path.join(work_dir, rle_filename)
+                
+                if not os.path.exists(program_output):
+                    return(FAILED, f"Program did not create an output file.")
+                
+                if not filecmp.cmp(program_output, golden_file, shallow=False):
+                    return (FAILED, "Output does not match known-good .rle file.", golden_file, program_output)
+                
+                return (PASSED,)
+            return comp_test_logic
         
-        if not run_test_case(f"Verifying compression of '{txt_filename}'", comp_test_logic, keep_files_flag):
-            overall_success = False
+        test_cases.append((f"Verifying compression of '{txt_filename}'", create_comp_test_logic(txt_filename, rle_filename, base_name)))
 
     # Find all .rle files and check for corresponding .txt files for decompression test
     rle_files = [f for f in os.listdir(SOURCE_TEST_FILES_DIR) if f.endswith('.rle')]
@@ -425,65 +473,71 @@ def run_decoupled_correctness_tests(keep_files_flag: bool) -> bool|None:
         if not os.path.exists(os.path.join(SOURCE_TEST_FILES_DIR, txt_filename)): continue
         
         tests_found += 1
-        def decomp_test_logic(work_dir):
-            shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, rle_filename), work_dir)
-            shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, txt_filename), work_dir)
-            subprocess.run([C_EXECUTABLE, "-d", os.path.join(work_dir, rle_filename)], check=True, capture_output=True, text=True, timeout=10)
-            program_output = os.path.join(work_dir, base_name + "_1.txt")
-            golden_file = os.path.join(work_dir, txt_filename)
-            
-            if not os.path.exists(program_output):
-                return(FAILED, f"Program did not create an output file.")
-            
-            if not filecmp.cmp(program_output, golden_file, shallow=False):
-                return (FAILED, "Output does not match known-good .txt file.", golden_file, program_output)
-            
-            return (PASSED,)
+        def create_decomp_test_logic(rle_filename, txt_filename, base_name):
+            def decomp_test_logic(work_dir):
+                shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, rle_filename), work_dir)
+                shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, txt_filename), work_dir)
+                subprocess.run([C_EXECUTABLE, "-d", os.path.join(work_dir, rle_filename)], check=True, capture_output=True, text=True, timeout=10)
+                program_output = os.path.join(work_dir, base_name + "_1.txt")
+                golden_file = os.path.join(work_dir, txt_filename)
+                
+                if not os.path.exists(program_output):
+                    return(FAILED, f"Program did not create an output file.")
+                
+                if not filecmp.cmp(program_output, golden_file, shallow=False):
+                    return (FAILED, "Output does not match known-good .txt file.", golden_file, program_output)
+                
+                return (PASSED,)
+            return decomp_test_logic
 
-        if not run_test_case(f"Verifying decompression of '{rle_filename}'", decomp_test_logic, keep_files_flag):
-            overall_success = False
+        test_cases.append((f"Verifying decompression of '{rle_filename}'", create_decomp_test_logic(rle_filename, txt_filename, base_name)))
 
     if tests_found == 0:
         print(f"  {Colors.WARNING}SKIPPED:{Colors.RESET} No matching '.txt' and '.rle' file pairs found in '{SOURCE_TEST_FILES_DIR}'.")
-        overall_success = SKIPPED # No tests were run
+        return (SKIPPED, [{"suite": "Suite 3: Decoupled Compression/Decompression Correctness", 
+                           "description": f"No matching '.txt' and '.rle' file pairs found in '{SOURCE_TEST_FILES_DIR}'.",
+                           "status": "SKIP", "details": ""}])
 
-    return overall_success
+    return run_suite("Suite 3: Decoupled Compression/Decompression Correctness", test_cases, keep_files_flag)
 
-def run_round_trip_integrity_tests(keep_files_flag: bool) -> bool|None:
+def run_round_trip_integrity_tests(keep_files_flag: bool) -> tuple[bool|None, list[dict]]:
     """SUITE 4: Performs a full compress -> decompress cycle and verifies integrity."""
     
     txt_files = [f for f in os.listdir(SOURCE_TEST_FILES_DIR) if f.endswith('.txt')]
     if not txt_files:
         print(f"  {Colors.WARNING}SKIPPED:{Colors.RESET} No .txt files found to test.")
-        return SKIPPED # No tests were run
+        return (SKIPPED, [{"suite": "Suite 4: Round-Trip Integrity", 
+                           "description": "No .txt files found to test.",
+                           "status": "SKIP", "details": ""}])
     
-    overall_success = True
+    test_cases = []
     for txt_filename in txt_files:
         
-        def test_logic(work_dir):
-            original_source_path = os.path.join(SOURCE_TEST_FILES_DIR, txt_filename)
-            working_txt_path = os.path.join(work_dir, txt_filename)
-            shutil.copy(original_source_path, working_txt_path)
-            
-            base_name, _ = os.path.splitext(txt_filename)
-            compressed_path = os.path.join(work_dir, base_name + ".rle")
-            decompressed_path = os.path.join(work_dir, base_name + "_1.txt")
-            
-            subprocess.run([C_EXECUTABLE, "-c", working_txt_path], check=True, capture_output=True, text=True, timeout=10)
-            subprocess.run([C_EXECUTABLE, "-d", compressed_path], check=True, capture_output=True, text=True, timeout=10)
-            
-            if not os.path.exists(decompressed_path):
-                return(FAILED, f"Decompression did not create an output file.")
-            
-            if not filecmp.cmp(original_source_path, decompressed_path, shallow=False):
-                return (FAILED, "Decompressed file does not match original.", original_source_path, decompressed_path)
-            
-            return (PASSED,)
+        def create_round_trip_logic(txt_filename):
+            def test_logic(work_dir):
+                original_source_path = os.path.join(SOURCE_TEST_FILES_DIR, txt_filename)
+                working_txt_path = os.path.join(work_dir, txt_filename)
+                shutil.copy(original_source_path, working_txt_path)
+                
+                base_name, _ = os.path.splitext(txt_filename)
+                compressed_path = os.path.join(work_dir, base_name + ".rle")
+                decompressed_path = os.path.join(work_dir, base_name + "_1.txt")
+                
+                subprocess.run([C_EXECUTABLE, "-c", working_txt_path], check=True, capture_output=True, text=True, timeout=10)
+                subprocess.run([C_EXECUTABLE, "-d", compressed_path], check=True, capture_output=True, text=True, timeout=10)
+                
+                if not os.path.exists(decompressed_path):
+                    return(FAILED, f"Decompression did not create an output file.")
+                
+                if not filecmp.cmp(original_source_path, decompressed_path, shallow=False):
+                    return (FAILED, "Decompressed file does not match original.", original_source_path, decompressed_path)
+                
+                return (PASSED,)
+            return test_logic
 
-        if not run_test_case(f"Testing round-trip for '{txt_filename}'", test_logic, keep_files_flag):
-            overall_success = False
+        test_cases.append((f"Testing round-trip for '{txt_filename}'", create_round_trip_logic(txt_filename)))
             
-    return overall_success
+    return run_suite("Suite 4: Round-Trip Integrity", test_cases, keep_files_flag)
 
 # =====================================================================
 #  MAIN FUNCTION
@@ -518,6 +572,11 @@ def main():
         help="Set the mode for certain UI validation tests:\n"
              "'strict': Fail the test case on an invalid error message (default).\n"
              "'warn':   Issue a warning but pass the test case."
+    )
+    parser.add_argument(
+        '-r', '--report',
+        action='store_true',
+        help="Generate a 'test_report.txt' file summarizing the run."
     )
     parser.add_argument(
         '-k', '--keep-files',
@@ -563,6 +622,8 @@ def main():
     suite_definitions[4] = (suite_definitions[4][0], lambda: run_round_trip_integrity_tests(args.keep_files))
 
     results = {"passed": 0, "failed": 0, "skipped": 0}
+    all_test_results = []
+    fail_test_results = []
     suites_to_run = sorted(suite_definitions.keys()) if args.suite is None else [args.suite]
 
     for suite_num in suites_to_run:
@@ -571,12 +632,14 @@ def main():
         print(f"  {desc}")
         print(f"======================================\n")
         
-        suit_result = suite_func()
+        suit_result, suite_results = suite_func()
+        all_test_results.extend(suite_results)
         
         if suit_result == PASSED:
             results["passed"] += 1
         elif suit_result == FAILED:
             results["failed"] += 1
+            fail_test_results.extend(suite_results)
         else:
             results["skipped"] += 1
     
@@ -587,9 +650,15 @@ def main():
     print(f"Failed : {Colors.FAILURE if results['failed'] > 0 else ''}{results['failed']}{Colors.RESET}")
     print(f"Skipped: {Colors.WARNING if results['skipped'] > 0 else ''}{results['skipped']}{Colors.RESET}")
     print("----------------------------")
+    
+    if args.report:
+        generate_report(all_test_results, results)
 
     # Final cleanup logic
     if results["failed"] > 0:
+        # Create a separate failure-only report by default regardless of args.report
+        generate_report(fail_test_results, results, report_file=FAILURE_REPORT_FILE)
+        
         print(f"\n{Colors.WARNING}Run complete. Artifacts for failed tests are preserved in '{TEMP_WORK_DIR}'.{Colors.RESET}")
     elif args.keep_files:
         print(f"\n{Colors.WARNING}Run complete. All test artifacts kept in '{TEMP_WORK_DIR}' as requested.{Colors.RESET}")
