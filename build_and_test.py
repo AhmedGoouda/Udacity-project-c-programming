@@ -126,11 +126,23 @@ def run_test_case(description: str, test_logic_func: Callable[..., bool], keep_a
     
     test_passed = FAILED
     try:
-        if test_logic_func(case_work_dir):
-            test_passed = PASSED
+        result_tuple = test_logic_func(case_work_dir)
+        test_passed = result_tuple[0]
+        
+        if test_passed == PASSED:
+            print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
             return PASSED
         else:
+            failure_message = result_tuple[1]
+            # Check for optional file paths for diagnosis
+            if len(result_tuple) == 4:
+                golden_path, generated_path = result_tuple[2], result_tuple[3]
+                diagnosis = diagnose_failure(golden_path, generated_path)
+                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: {failure_message}\n      -> Diagnosis: {diagnosis}")
+            else:
+                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: {failure_message}")
             return FAILED
+        
     except subprocess.TimeoutExpired as e:
         print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: The C program timed out after {e.timeout} seconds (likely an infinite loop).")
         return FAILED
@@ -179,146 +191,115 @@ def run_ui_and_input_tests(golden_help_message: str, validation_mode: str, keep_
         result = subprocess.run([C_EXECUTABLE] + args_to_test, capture_output=True, text=True, timeout=10)
         full_output = (result.stderr + result.stdout).strip()
         if full_output.endswith(golden_help_message):
-            print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-            return PASSED
+            return (PASSED,)
         else:
-            print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Output did not end with the expected usage message.")
-            print(f"      -> Expected (to end with): '{golden_help_message}'")
-            print(f"      ->                      Got: '{full_output}'")
-            return FAILED
+            return (FAILED, f"Output did not end with the expected usage message.\n      -> Expected (to end with): '{golden_help_message}'\n      -> Got: '{full_output}'")
 
     def test_non_existent_file(work_dir):
         try:
             non_existent_file = os.path.join(work_dir, "this_file_does_not_exist.txt")
             subprocess.run([C_EXECUTABLE, "-c", non_existent_file], check=True, capture_output=True, text=True, timeout=10)
-            print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program did not error on a non-existent file.")
-            return FAILED
+            return (FAILED, "Program did not error on a non-existent file.")
         except subprocess.CalledProcessError as e:
             error_message = e.stderr.lower()
             # Check for common keywords indicating a file-not-found error
             expected_keywords = ["error", "open", "opening", "no such file", "does not", "doesn't", "exist", "cannot", "can't", "found"]
             if any(k in error_message for k in expected_keywords):
-                print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-                return PASSED
+                return (PASSED,)
             else:
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Incorrect error message for non-existent file. Got: '{e.stderr.strip()}'")
-                return FAILED
+                return (FAILED, f"Incorrect error message for non-existent file. Got: '{e.stderr.strip()}'")
 
     def test_empty_file_compression(work_dir, mode):
         with open(os.path.join(work_dir, "empty.txt"), "w") as f: pass
         try:
             subprocess.run([C_EXECUTABLE, "-c", os.path.join(work_dir, "empty.txt")], check=True, capture_output=True, text=True, timeout=10)
             if mode == 'strict':
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program did not error out on an empty input file as expected.")
-                return FAILED
+                return(FAILED, "Program did not error out on an empty input file as expected.")
             else:
-                print(f" {Colors.WARNING}WARNING{Colors.RESET}: Program did not error out on an empty input file.")
-                return PASSED
+                return(PASSED, "Program did not error out on an empty input file.")
         except subprocess.CalledProcessError as e:
-            hard_failure = False
             error_message = e.stderr.lower()
             # Check for keywords indicating an empty file error
             expected_keywords = ["empty", "zero", "length"]
             if not any(keyword in error_message for keyword in expected_keywords):
                 if mode == 'strict':
-                    print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program errored, but stderr message was not as expected. Got: '{e.stderr.strip()}'")
-                    hard_failure = True
+                    return(FAILED, f"Program errored, but stderr message was not as expected. Got: '{e.stderr.strip()}'")
                 else:
-                    print(f" {Colors.WARNING}WARNING{Colors.RESET}: Program errored, but stderr message was not as expected. Got: '{e.stderr.strip()}'")
+                    return(PASSED, f"Program errored, but stderr message was not as expected. Got: '{e.stderr.strip()}'")
             
             if os.path.exists(os.path.join(work_dir, "empty.rle")):
                 if mode == 'strict':
-                    print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program created an output file despite the empty input.")
-                    hard_failure = True
+                    return(FAILED, f"Program created an output file despite the empty input.")
                 else:
-                    print(f" {Colors.WARNING}WARNING{Colors.RESET}: Program created an output file despite the empty input.")
-            
-            if not hard_failure:
-                print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-            return not hard_failure
+                    return(PASSED, f"Program created an output file despite the empty input.")
+                
+            return (PASSED,)
 
     def test_empty_file_decompression(work_dir, mode):
         with open(os.path.join(work_dir, "empty.rle"), "w") as f: pass
         try:
             subprocess.run([C_EXECUTABLE, "-d", os.path.join(work_dir, "empty.rle")], check=True, capture_output=True, text=True, timeout=10)
             if mode == 'strict':
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program did not error out on an empty input file as expected.")
-                return FAILED
+                return(FAILED, f"Program did not error out on an empty input file as expected.")
             else:
-                print(f" {Colors.WARNING}WARNING{Colors.RESET}: Program did not error out on an empty input file.")
-                return PASSED
+                return(PASSED, f"Program did not error out on an empty input file.")
         except subprocess.CalledProcessError as e:
-            hard_failure = False
             error_message = e.stderr.lower()
             # Check for keywords indicating an empty file error
             expected_keywords = ["empty", "zero", "length"]
             if not any(keyword in error_message for keyword in expected_keywords):
                 if mode == 'strict':
-                    print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program errored, but stderr message was not as expected. Got: '{e.stderr.strip()}'")
-                    hard_failure = True
+                    return(FAILED, f"Program errored, but stderr message was not as expected. Got: '{e.stderr.strip()}'")
                 else:
-                    print(f" {Colors.WARNING}WARNING{Colors.RESET}: Program errored, but stderr message was not as expected. Got: '{e.stderr.strip()}'")
+                    return(PASSED, f"Program errored, but stderr message was not as expected. Got: '{e.stderr.strip()}'")
 
             if os.path.exists(os.path.join(work_dir, "empty.txt")):
                 if mode == 'strict':
-                    print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program created an output file despite the empty input.")
-                    hard_failure = True
+                    return(FAILED, f"Program created an output file despite the empty input.")
                 else:
-                    print(f" {Colors.WARNING}WARNING{Colors.RESET}: Program created an output file despite the empty input.")
-
-            if not hard_failure:
-                print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-            return not hard_failure
+                    return(PASSED, f"Program created an output file despite the empty input.")
+                    
+            return (PASSED,)
 
     def test_wrong_extension_for_compression(work_dir, mode):
         with open(os.path.join(work_dir, "file.rle"), "w") as f: f.write("dummy content")
         try:
             subprocess.run([C_EXECUTABLE, "-c", os.path.join(work_dir, "file.rle")], check=True, capture_output=True, text=True, timeout=10)
             if mode == 'strict':
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program did not error when compressing a .rle file.")
-                return FAILED
+                return(FAILED, f"Program did not error when compressing a .rle file.")
             else:
-                print(f" {Colors.WARNING}WARNING{Colors.RESET}: Program did not error when compressing a .rle file.")
-                return PASSED
+                return(PASSED, f"Program did not error when compressing a .rle file.")
         except subprocess.CalledProcessError as e:
             error_message = e.stderr.lower()
             # Check for common keywords indicating a wrong extension error
             expected_keywords = ["invalid", "extension", "file", "type"]
             if any(k in error_message for k in expected_keywords):
-                print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-                return PASSED
+                return (PASSED,)
             else:
                 if mode == 'strict':
-                    print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Incorrect error message for wrong extension. Got: '{e.stderr.strip()}'")
-                    return FAILED
+                    return(FAILED, f"Incorrect error message for wrong extension. Got: '{e.stderr.strip()}'")
                 else:
-                    print(f" {Colors.WARNING}WARNING{Colors.RESET}: Incorrect error message for wrong extension. Got: '{e.stderr.strip()}'")
-                    return PASSED
+                    return(PASSED, f"Incorrect error message for wrong extension. Got: '{e.stderr.strip()}'")
 
     def test_wrong_extension_for_decompression(work_dir, mode):
         with open(os.path.join(work_dir, "file.txt"), "w") as f: f.write("dummy content")
         try:
             subprocess.run([C_EXECUTABLE, "-d", os.path.join(work_dir, "file.txt")], check=True, capture_output=True, text=True, timeout=10)
             if mode == 'strict':
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program did not error when decompressing a .txt file.")
-                return FAILED
+                return(FAILED, f"Program did not error when decompressing a .txt file.")
             else:
-                print(f" {Colors.WARNING}WARNING{Colors.RESET}: Program did not error when decompressing a .txt file.")
-                return PASSED
+                return(PASSED, f"Program did not error when decompressing a .txt file.")
         except subprocess.CalledProcessError as e:
             error_message = e.stderr.lower()
             # Check for common keywords indicating a wrong extension error
             expected_keywords = ["invalid", "extension", "file", "type"]
             if any(k in error_message for k in expected_keywords):
-                print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-                return PASSED
+                return (PASSED,)
             else:
                 if mode == 'strict':
-                    print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Incorrect error message for wrong extension. Got: '{e.stderr.strip()}'")
-                    return FAILED
+                    return(FAILED, f"Incorrect error message for wrong extension. Got: '{e.stderr.strip()}'")
                 else:
-                    print(f" {Colors.WARNING}WARNING{Colors.RESET}: Incorrect error message for wrong extension. Got: '{e.stderr.strip()}'")
-                    return PASSED
+                    return(PASSED, f"Incorrect error message for wrong extension. Got: '{e.stderr.strip()}'")
 
     # Define all UI tests
     ui_tests = [
@@ -355,10 +336,8 @@ def run_output_file_naming_tests(keep_files_flag: bool) -> bool:
         with open(os.path.join(work_dir, f"{base_name}.rle"), "w") as f: f.write("dummy")
         subprocess.run([C_EXECUTABLE, "-c", os.path.join(work_dir, f"{base_name}.txt")], check=True, capture_output=True, text=True, timeout=10)
         if not os.path.exists(os.path.join(work_dir, f"{base_name}_1.rle")):
-            print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: '_1.rle' file not created.")
-            return FAILED
-        print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-        return PASSED
+            return(FAILED, f"'_1.rle' file not created.")
+        return (PASSED,)
 
     def test_single_decomp_conflict(work_dir):
         base_name = "conflict"
@@ -366,10 +345,8 @@ def run_output_file_naming_tests(keep_files_flag: bool) -> bool:
         with open(os.path.join(work_dir, f"{base_name}.rle"), "w") as f: f.write("3A")
         subprocess.run([C_EXECUTABLE, "-d", os.path.join(work_dir, f"{base_name}.rle")], check=True, capture_output=True, text=True, timeout=10)
         if not os.path.exists(os.path.join(work_dir, f"{base_name}_1.txt")):
-            print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: '_1.txt' file not created.")
-            return FAILED
-        print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-        return PASSED
+            return(FAILED, f"'_1.txt' file not created.")
+        return (PASSED,)
 
     def test_multi_comp_conflict(work_dir):
         base_name = "multi"
@@ -379,10 +356,8 @@ def run_output_file_naming_tests(keep_files_flag: bool) -> bool:
             with open(os.path.join(work_dir, f"{base_name}_{i}.rle"), "w") as f: f.write("dummy")
         subprocess.run([C_EXECUTABLE, "-c", os.path.join(work_dir, f"{base_name}.txt")], check=True, capture_output=True, text=True, timeout=10)
         if not os.path.exists(os.path.join(work_dir, f"{base_name}_10.rle")):
-            print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: '_10.rle' file not created.")
-            return FAILED
-        print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-        return PASSED
+            return(FAILED, f"'_10.rle' file not created.")
+        return (PASSED,)
 
     def test_multi_decomp_conflict(work_dir):
         base_name = "multi"
@@ -392,10 +367,8 @@ def run_output_file_naming_tests(keep_files_flag: bool) -> bool:
             with open(os.path.join(work_dir, f"{base_name}_{i}.txt"), "w") as f: f.write("dummy")
         subprocess.run([C_EXECUTABLE, "-d", os.path.join(work_dir, f"{base_name}.rle")], check=True, capture_output=True, text=True, timeout=10)
         if not os.path.exists(os.path.join(work_dir, f"{base_name}_10.txt")):
-            print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: '_10.txt' file not created.")
-            return FAILED
-        print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-        return PASSED
+            return(FAILED, f"'_10.txt' file not created.")
+        return (PASSED,)
 
     file_naming_tests = [
         ("Testing single compression conflict (_1.rle)", test_single_comp_conflict),
@@ -410,7 +383,7 @@ def run_output_file_naming_tests(keep_files_flag: bool) -> bool:
             overall_success = False
     return overall_success
 
-def run_decoupled_correctness_tests(keep_files_flag: bool) -> bool:
+def run_decoupled_correctness_tests(keep_files_flag: bool) -> bool|None:
     """SUITE 3: Runs decoupled tests for compression and decompression against known-good files."""
     
     tests_found = 0
@@ -433,16 +406,12 @@ def run_decoupled_correctness_tests(keep_files_flag: bool) -> bool:
             golden_file = os.path.join(work_dir, rle_filename)
             
             if not os.path.exists(program_output):
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program did not create an output file.")
-                return FAILED
+                return(FAILED, f"Program did not create an output file.")
             
             if not filecmp.cmp(program_output, golden_file, shallow=False):
-                reason = diagnose_failure(golden_file, program_output)
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Output does not match known-good .rle file.\n      -> Likely Cause: {reason}")
-                return FAILED
+                return (FAILED, "Output does not match known-good .rle file.", golden_file, program_output)
             
-            print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-            return PASSED
+            return (PASSED,)
         
         if not run_test_case(f"Verifying compression of '{txt_filename}'", comp_test_logic, keep_files_flag):
             overall_success = False
@@ -464,16 +433,12 @@ def run_decoupled_correctness_tests(keep_files_flag: bool) -> bool:
             golden_file = os.path.join(work_dir, txt_filename)
             
             if not os.path.exists(program_output):
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Program did not create an output file.")
-                return FAILED
+                return(FAILED, f"Program did not create an output file.")
             
             if not filecmp.cmp(program_output, golden_file, shallow=False):
-                reason = diagnose_failure(golden_file, program_output)
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Output does not match known-good .txt file.\n      -> Likely Cause: {reason}")
-                return FAILED
+                return (FAILED, "Output does not match known-good .txt file.", golden_file, program_output)
             
-            print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-            return PASSED
+            return (PASSED,)
 
         if not run_test_case(f"Verifying decompression of '{rle_filename}'", decomp_test_logic, keep_files_flag):
             overall_success = False
@@ -484,7 +449,7 @@ def run_decoupled_correctness_tests(keep_files_flag: bool) -> bool:
 
     return overall_success
 
-def run_round_trip_integrity_tests(keep_files_flag: bool) -> bool:
+def run_round_trip_integrity_tests(keep_files_flag: bool) -> bool|None:
     """SUITE 4: Performs a full compress -> decompress cycle and verifies integrity."""
     
     txt_files = [f for f in os.listdir(SOURCE_TEST_FILES_DIR) if f.endswith('.txt')]
@@ -508,16 +473,12 @@ def run_round_trip_integrity_tests(keep_files_flag: bool) -> bool:
             subprocess.run([C_EXECUTABLE, "-d", compressed_path], check=True, capture_output=True, text=True, timeout=10)
             
             if not os.path.exists(decompressed_path):
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Decompression did not create an output file.")
-                return FAILED
+                return(FAILED, f"Decompression did not create an output file.")
             
             if not filecmp.cmp(original_source_path, decompressed_path, shallow=False):
-                reason = diagnose_failure(original_source_path, decompressed_path)
-                print(f" {Colors.FAILURE}FAILURE{Colors.RESET}: Decompressed file does not match original.\n      -> Likely Cause: {reason}")
-                return FAILED
+                return (FAILED, "Decompressed file does not match original.", original_source_path, decompressed_path)
             
-            print(f" {Colors.SUCCESS}SUCCESS{Colors.RESET}")
-            return PASSED
+            return (PASSED,)
 
         if not run_test_case(f"Testing round-trip for '{txt_filename}'", test_logic, keep_files_flag):
             overall_success = False
