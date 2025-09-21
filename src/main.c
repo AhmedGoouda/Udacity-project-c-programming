@@ -41,11 +41,10 @@ int main(int argc, char const *argv[])
         LOG_ERROR("Operation failed with error code: %d", s32_ret_val);
         return 1;
     }
-
-    // char ac_file_basename[256] = {0};
-    // s32 s32_ret = get_file_basename(argv[2],ac_file_basename);
-    // LOG("Return value: %d", s32_ret);
-    // printf("File basename: %s\n", ac_file_basename);
+    else
+    {
+        LOG("Operation completed successfully.");
+    }
 
     return 0;
 }

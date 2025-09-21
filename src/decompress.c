@@ -57,9 +57,15 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
                 {
                     non_digit_char = pc_input_data[i + 1];
                 }
-                else
+                else if ('\\' == pc_input_data[i + 1])
                 {
                     non_digit_char = '\\';
+                }
+                else
+                {
+                    LOG_ERROR("Invalid escape sequence in compressed data.");
+                    s32_ret_val = ERROR_INVALID_DATA;
+                    break;
                 }
                 i++; // Skip the next character as it's part of the escape sequence
             }
