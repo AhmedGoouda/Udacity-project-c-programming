@@ -32,6 +32,12 @@ gcc ./src/compress.c ./src/decompress.c ./src/utils.c ./src/main.c -o compressor
 ./compressor -d ./test_files/test.rle
 ```
 
+## Automated Testing
+Run the provided python script to build and test the project:
+```
+python build_and_test.py
+```
+
 ## License
 This project is **not licensed** for reuse or redistribution.  
 
