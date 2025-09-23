@@ -49,13 +49,13 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
             {
                 u64_needed_size = u64_write_idx + 2 + sizeof(ac_char_count_str); // 2 for possible escape characters
 
-                if (u64_needed_size + (*pu64_output_data_size) + COM_DECOMP_DATA_CHUNK_SIZE_BYTES < UINT64_MAX)
+                if (u64_needed_size + (*pu64_output_data_size) + DATA_CHUNK_SIZE_BYTES < UINT64_MAX)
                 {
                     if (u64_needed_size >= *pu64_output_data_size)
                     {
                         LOG("Reallocating memory for compression buffer.");
 
-                        *pu64_output_data_size += COM_DECOMP_DATA_CHUNK_SIZE_BYTES;
+                        *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
                         *ppc_output_data = (char *)realloc(*ppc_output_data, *pu64_output_data_size);
 
                         if (NULL == *ppc_output_data)
@@ -199,13 +199,7 @@ s32 compress(const char *input_file_name)
                 break;
             }
 
-            if (0 == u64_raw_data_size)
-            {
-                LOG_ERROR("Input file is empty.");
-                s32_ret_val = ERROR_EMPTY_FILE;
-                break;
-            }
-            else if (u64_raw_data_size <= UINT64_MAX / 2)
+            if (u64_raw_data_size <= UINT64_MAX / 2)
             {
                 u64_compressed_size = 2 * u64_raw_data_size; // Worst case scenario
             }
@@ -248,18 +242,21 @@ s32 compress(const char *input_file_name)
         // Clean-up
         if (SUCCESS_STATUS != s32_ret_val)
         {
+            // Save the error code before clean-up
+            s32 s32_err = s32_ret_val;
+
             LOG_ERROR("Exit compression loop with error code: %d", s32_ret_val);
 
             if (NULL != pf_in_file)
             {
                 s32_ret_val = close_file(&pf_in_file);
-                LOG_INFO("Close pf_in_file: %d", s32_ret_val);
+                LOG_INFO("Close Input File: %d", s32_ret_val);
             }
 
             if (NULL != pf_out_file)
             {
                 s32_ret_val = close_file(&pf_out_file);
-                LOG_INFO("Close pf_out_file: %d", s32_ret_val);
+                LOG_INFO("Close Output File: %d", s32_ret_val);
             }
 
             if (NULL != pc_out_file_path)
@@ -269,6 +266,9 @@ s32 compress(const char *input_file_name)
                     s32_ret_val = delete_file(pc_out_file_path);
                 }
             }
+
+            // Restore the original error code
+            s32_ret_val = s32_err;
         }
 
         // Free allocated memory

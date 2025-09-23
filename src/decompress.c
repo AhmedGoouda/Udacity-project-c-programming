@@ -89,13 +89,13 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
 
             u64_needed_size = u64_write_idx + u64_char_cnt + 1; // +1 for the already written character
 
-            if ((u64_needed_size + (*pu64_output_data_size) + COM_DECOMP_DATA_CHUNK_SIZE_BYTES) < UINT64_MAX)
+            if ((u64_needed_size + (*pu64_output_data_size) + DATA_CHUNK_SIZE_BYTES) < UINT64_MAX)
             {
                 if (u64_needed_size >= *pu64_output_data_size)
                 {
                     LOG("Reallocating memory for decompression buffer.");
 
-                    *pu64_output_data_size += COM_DECOMP_DATA_CHUNK_SIZE_BYTES;
+                    *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
                     *ppc_output_data = (char *)realloc(*ppc_output_data, *pu64_output_data_size);
 
                     if (NULL == *ppc_output_data)
@@ -208,16 +208,7 @@ s32 decompress(const char *input_file_name)
                 break;
             }
 
-            if (0 == u64_raw_data_size)
-            {
-                LOG_ERROR("Input file is empty.");
-                s32_ret_val = ERROR_EMPTY_FILE;
-                break;
-            }
-            else
-            {
-                u64_decompressed_size = u64_raw_data_size / 2;  // best scenario of size
-            }
+            u64_decompressed_size = u64_raw_data_size / 2;  // best scenario of size
 
             pc_decompressed_buff = (char *)malloc(u64_decompressed_size);
 
@@ -250,6 +241,9 @@ s32 decompress(const char *input_file_name)
         // Clean-up
         if (SUCCESS_STATUS != s32_ret_val)
         {
+            // Save the error code before clean-up
+            s32 s32_err = s32_ret_val;
+
             LOG_ERROR("Exit decompression loop with error code: %d", s32_ret_val);
 
             if (NULL != pf_in_file)
@@ -269,6 +263,9 @@ s32 decompress(const char *input_file_name)
                     s32_ret_val = delete_file(pc_out_file_path);
                 }
             }
+
+            // Restore the original error code
+            s32_ret_val = s32_err;
         }
 
         // Free allocated memory

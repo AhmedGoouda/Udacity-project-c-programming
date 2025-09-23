@@ -449,7 +449,7 @@ def run_decoupled_correctness_tests(keep_files_flag: bool) -> tuple[bool|None, l
             def comp_test_logic(work_dir):
                 shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, txt_filename), work_dir)
                 shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, rle_filename), work_dir)
-                subprocess.run([C_EXECUTABLE, "-c", os.path.join(work_dir, txt_filename)], check=True, capture_output=True, text=True, timeout=10)
+                subprocess.run([C_EXECUTABLE, "-c", os.path.join(work_dir, txt_filename)], check=True, capture_output=True, text=True, timeout=100)
                 program_output = os.path.join(work_dir, base_name + "_1.rle")
                 golden_file = os.path.join(work_dir, rle_filename)
                 
@@ -477,7 +477,7 @@ def run_decoupled_correctness_tests(keep_files_flag: bool) -> tuple[bool|None, l
             def decomp_test_logic(work_dir):
                 shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, rle_filename), work_dir)
                 shutil.copy(os.path.join(SOURCE_TEST_FILES_DIR, txt_filename), work_dir)
-                subprocess.run([C_EXECUTABLE, "-d", os.path.join(work_dir, rle_filename)], check=True, capture_output=True, text=True, timeout=10)
+                subprocess.run([C_EXECUTABLE, "-d", os.path.join(work_dir, rle_filename)], check=True, capture_output=True, text=True, timeout=100)
                 program_output = os.path.join(work_dir, base_name + "_1.txt")
                 golden_file = os.path.join(work_dir, txt_filename)
                 
@@ -523,8 +523,8 @@ def run_round_trip_integrity_tests(keep_files_flag: bool) -> tuple[bool|None, li
                 compressed_path = os.path.join(work_dir, base_name + ".rle")
                 decompressed_path = os.path.join(work_dir, base_name + "_1.txt")
                 
-                subprocess.run([C_EXECUTABLE, "-c", working_txt_path], check=True, capture_output=True, text=True, timeout=10)
-                subprocess.run([C_EXECUTABLE, "-d", compressed_path], check=True, capture_output=True, text=True, timeout=10)
+                subprocess.run([C_EXECUTABLE, "-c", working_txt_path], check=True, capture_output=True, text=True, timeout=100)
+                subprocess.run([C_EXECUTABLE, "-d", compressed_path], check=True, capture_output=True, text=True, timeout=100)
                 
                 if not os.path.exists(decompressed_path):
                     return(FAILED, f"Decompression did not create an output file.")

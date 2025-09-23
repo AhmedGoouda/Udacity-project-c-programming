@@ -193,7 +193,7 @@ def main():
     group.add_argument("--escape-chars", type=int, choices=[1,2,3,4], default=2,
                         help="Escape characters mode {1, 2, 3, 4}: "
                             "1 = No escapes, "
-                            "2 = All escapes, "
+                            "2 = All escapes (default), "
                             "3 = Newline only, "
                             "4 = Spaces+tabs only", metavar="")
     
