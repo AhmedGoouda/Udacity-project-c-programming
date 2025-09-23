@@ -49,13 +49,13 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
             {
                 u64_needed_size = u64_write_idx + 2 + sizeof(ac_char_count_str); // 2 for possible escape characters
 
-                if (u64_needed_size + *pu64_output_data_size + DATA_CHUNK_SIZE_BYTES < UINT64_MAX)
+                if (u64_needed_size + (*pu64_output_data_size) + COM_DECOMP_DATA_CHUNK_SIZE_BYTES < UINT64_MAX)
                 {
                     if (u64_needed_size >= *pu64_output_data_size)
                     {
                         LOG("Reallocating memory for compression buffer.");
 
-                        *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
+                        *pu64_output_data_size += COM_DECOMP_DATA_CHUNK_SIZE_BYTES;
                         *ppc_output_data = (char *)realloc(*ppc_output_data, *pu64_output_data_size);
 
                         if (NULL == *ppc_output_data)
@@ -165,7 +165,6 @@ s32 compress(const char *input_file_name)
         u64 u64_raw_data_size = 0;
 
         char *pc_compressed_buff = NULL;
-        u64 u64_max_compressed_size = 0;
         u64 u64_compressed_size = 0;
 
         char ac_input_file_extention[5] = {0};
@@ -208,7 +207,7 @@ s32 compress(const char *input_file_name)
             }
             else if (u64_raw_data_size <= UINT64_MAX / 2)
             {
-                u64_max_compressed_size = 2 * u64_raw_data_size; // Worst case scenario
+                u64_compressed_size = 2 * u64_raw_data_size; // Worst case scenario
             }
             else
             {
@@ -217,7 +216,7 @@ s32 compress(const char *input_file_name)
                 break;
             }
 
-            pc_compressed_buff = (char *)malloc(u64_max_compressed_size);
+            pc_compressed_buff = (char *)malloc(u64_compressed_size);
 
             if (NULL == pc_compressed_buff)
             {

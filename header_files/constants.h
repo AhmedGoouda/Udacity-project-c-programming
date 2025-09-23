@@ -6,8 +6,11 @@
 #define ONE_KB_SIZE_BYTES       (1024u)
 #define ONE_MB_SIZE_BYTES       (1024u * 1024u)
 
+// Define chunk size for reading files
+#define READ_DATA_CHUNK_SIZE_BYTES         ONE_KB_SIZE_BYTES
+
 // Define chunk size for compression/decompression operations
-#define DATA_CHUNK_SIZE_BYTES   (ONE_MB_SIZE_BYTES)
+#define COM_DECOMP_DATA_CHUNK_SIZE_BYTES   ONE_MB_SIZE_BYTES
 
 // enumeration for error codes
 typedef enum 

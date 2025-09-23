@@ -89,13 +89,13 @@ static s32 s32_rle_decompress(const char *pc_input_data, const u64 u64_input_dat
 
             u64_needed_size = u64_write_idx + u64_char_cnt + 1; // +1 for the already written character
 
-            if ((u64_needed_size + *pu64_output_data_size + DATA_CHUNK_SIZE_BYTES) < UINT64_MAX)
+            if ((u64_needed_size + (*pu64_output_data_size) + COM_DECOMP_DATA_CHUNK_SIZE_BYTES) < UINT64_MAX)
             {
                 if (u64_needed_size >= *pu64_output_data_size)
                 {
                     LOG("Reallocating memory for decompression buffer.");
 
-                    *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
+                    *pu64_output_data_size += COM_DECOMP_DATA_CHUNK_SIZE_BYTES;
                     *ppc_output_data = (char *)realloc(*ppc_output_data, *pu64_output_data_size);
 
                     if (NULL == *ppc_output_data)

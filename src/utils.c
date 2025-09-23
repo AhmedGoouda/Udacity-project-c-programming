@@ -129,7 +129,7 @@ s32 read_file(FILE *p_file, char **ppc_read_data_buff, u64 *pu64_read_data_size)
     else
     {
         *pu64_read_data_size = 0;
-        size_t read_size = DATA_CHUNK_SIZE_BYTES;
+        size_t read_size = READ_DATA_CHUNK_SIZE_BYTES;
         *ppc_read_data_buff = (char *)malloc(read_size);
 
         if (NULL == *ppc_read_data_buff)
@@ -146,14 +146,14 @@ s32 read_file(FILE *p_file, char **ppc_read_data_buff, u64 *pu64_read_data_size)
             {
                 if (*pu64_read_data_size < read_size)
                 {
-                    read_bytes_count = fread(*ppc_read_data_buff + (*pu64_read_data_size), sizeof(char), DATA_CHUNK_SIZE_BYTES, p_file);
+                    read_bytes_count = fread(*ppc_read_data_buff + (*pu64_read_data_size), sizeof(char), READ_DATA_CHUNK_SIZE_BYTES, p_file);
                     *pu64_read_data_size += read_bytes_count;
                 }
                 else
                 {
                     LOG("Read %lu bytes, reallocating buffer for more data.", *pu64_read_data_size);
 
-                    read_size += DATA_CHUNK_SIZE_BYTES;
+                    read_size += READ_DATA_CHUNK_SIZE_BYTES;
                     *ppc_read_data_buff = (char *)realloc(*ppc_read_data_buff, read_size);
 
                     if (*ppc_read_data_buff == NULL)
