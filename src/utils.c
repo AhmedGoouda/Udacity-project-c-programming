@@ -5,6 +5,109 @@
 
 #include "../header_files/utils.h"
 
+// Helper function to get the size of the file in bytes if it is opened in binary mode
+static s32 get_file_size_binary_mode(FILE *p_file, u64 *pu64_file_size)
+{
+    s32 s32_ret_val = FAILURE_STATUS;
+
+    if (NULL == p_file || NULL == pu64_file_size)
+    {
+        LOG_ERROR("NULL pointer provided for file or file size.");
+        s32_ret_val = ERROR_NULL_POINTER;
+    }
+    else
+    {
+        s64 s64_current_pos = ftell(p_file);
+
+        if (s64_current_pos == -1L)
+        {
+            LOG_ERROR("Error getting current file position: %s", strerror(errno));
+            s32_ret_val = ERROR_FILE_READ_FAILED;
+        }
+        else if (fseek(p_file, 0, SEEK_END) != 0)
+        {
+            LOG_ERROR("Error seeking to end of file: %s", strerror(errno));
+            s32_ret_val = ERROR_FILE_READ_FAILED;
+        }
+        else
+        {
+            s64 s64_file_size = ftell(p_file);
+            if (s64_file_size == -1L)
+            {
+                LOG_ERROR("Error getting file size: %s", strerror(errno));
+                s32_ret_val = ERROR_FILE_READ_FAILED;
+            }
+            else
+            {
+                *pu64_file_size = (u64)s64_file_size;                
+
+                LOG("File size: %lu bytes", *pu64_file_size);
+                s32_ret_val = SUCCESS_STATUS;
+            }
+
+            // Restore original file position
+            if (fseek(p_file, s64_current_pos, SEEK_SET) != 0)
+            {
+                LOG_ERROR("Error restoring file position: %s", strerror(errno));
+                s32_ret_val = ERROR_FILE_READ_FAILED;
+            }
+        }
+    }
+
+    return s32_ret_val;
+}
+
+// Helper function to get the size of the file in bytes if it is opened in text mode
+static s32 get_file_size_text_mode(FILE *p_file, u64 *pu64_file_size)
+{
+    s32 s32_ret_val = FAILURE_STATUS;
+
+    if (NULL == p_file || NULL == pu64_file_size)
+    {
+        LOG_ERROR("NULL pointer provided for file or file size.");
+        s32_ret_val = ERROR_NULL_POINTER;
+    }
+    else
+    {
+        // Reset file position to the beginning
+        if (fseek(p_file, 0, SEEK_SET) != 0)
+        {
+            LOG_ERROR("Error seeking to beginning of file: %s", strerror(errno));
+            s32_ret_val = ERROR_FILE_READ_FAILED;
+        }
+        else
+        {
+            u64 u64_size = 0;
+            int ch;
+
+            while ((ch = fgetc(p_file)) != EOF)
+            {
+                u64_size++;
+            }
+
+            if (ferror(p_file))
+            {
+                LOG_ERROR("Error reading file to determine size: %s", strerror(errno));
+                s32_ret_val = ERROR_FILE_READ_FAILED;
+            }
+            else
+            {
+                *pu64_file_size = u64_size;
+                LOG("File size: %lu bytes", *pu64_file_size);
+                s32_ret_val = SUCCESS_STATUS;
+            }
+
+            // Restore original file position
+            if (fseek(p_file, 0, SEEK_SET) != 0)
+            {
+                LOG_ERROR("Error restoring file position: %s", strerror(errno));
+                s32_ret_val = ERROR_FILE_READ_FAILED;
+            }
+        }
+    }
+
+    return s32_ret_val;
+}
 
 
 /**
@@ -108,7 +211,6 @@ s32 close_file(FILE **pp_file)
     return s32_ret_val;
 }
 
-
 /**
  * @brief 
  * 
@@ -128,99 +230,68 @@ s32 read_file(FILE *p_file, char **ppc_read_data_buff, u64 *pu64_read_data_size)
     }
     else
     {
-        *pu64_read_data_size = 0;
-        size_t read_size = DATA_CHUNK_SIZE_BYTES;
-        *ppc_read_data_buff = (char *)malloc(read_size);
-
-        if (NULL == *ppc_read_data_buff)
+        do
         {
-            LOG_ERROR("Error allocating memory for read data buffer: %s", strerror(errno));
-            s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
-        }
-        else
-        {
-            size_t read_bytes_count = 0;
-            char *pc_read_data_buff_shadow = *ppc_read_data_buff; // Shadow pointer to free in case of realloc failure
+            s32_ret_val = get_file_size_text_mode(p_file, pu64_read_data_size);
+            ERROR_BREAK(s32_ret_val);
 
-            while (1)
+            if (0 == *pu64_read_data_size)
             {
-                if (*pu64_read_data_size < read_size)
-                {
-                    read_bytes_count = fread(*ppc_read_data_buff + (*pu64_read_data_size), sizeof(char), DATA_CHUNK_SIZE_BYTES, p_file);
-                    *pu64_read_data_size += read_bytes_count;
-                }
-                else
-                {
-                    LOG("Read %lu bytes, reallocating buffer for more data.", *pu64_read_data_size);
-
-                    read_size += DATA_CHUNK_SIZE_BYTES;
-                    *ppc_read_data_buff = (char *)realloc(*ppc_read_data_buff, read_size);
-
-                    if (*ppc_read_data_buff == NULL)
-                    {
-                        LOG_ERROR("Error reallocating memory for read data buffer: %s", strerror(errno));
-                        s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
-                        free(pc_read_data_buff_shadow);
-                        pc_read_data_buff_shadow = NULL;
-                        break;
-                    }
-                    else
-                    {
-                        continue;
-                    }
-                }
-
-                if (ferror(p_file))
-                {
-                    LOG_ERROR("Error reading file: %s", strerror(errno));
-                    s32_ret_val = ERROR_FILE_READ_FAILED;
-
-                    if (NULL != *ppc_read_data_buff)
-                    {
-                        free(*ppc_read_data_buff);
-                        *ppc_read_data_buff = NULL;
-                    }
-
-                    break;
-                }
-                else if (feof(p_file))
-                {
-                    LOG("End of file reached. Read %zu bytes successfully.", *pu64_read_data_size);
-                    s32_ret_val = SUCCESS_STATUS;
-                    break;
-                }
-                else
-                {
-                    LOG("Read %zu bytes successfully.", *pu64_read_data_size);
-                }
+                LOG_ERROR("File is empty.");
+                s32_ret_val = ERROR_EMPTY_FILE;
+                break;
             }
 
-            if (SUCCESS_STATUS == s32_ret_val)
-            {
-                if ((*pu64_read_data_size < read_size) && (0 != *pu64_read_data_size))
-                {
-                    LOG("Reallocating buffer to the actual size read.");
-                    *ppc_read_data_buff = (char *)realloc(*ppc_read_data_buff, *pu64_read_data_size);
+            *ppc_read_data_buff = (char *)malloc(*pu64_read_data_size);
 
-                    if (NULL == *ppc_read_data_buff)
-                    {
-                        LOG_ERROR("Error reallocating memory to the actual size read: %s", strerror(errno));
-                        s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
-                        free(pc_read_data_buff_shadow);
-                        pc_read_data_buff_shadow = NULL;
-                    }
+            if (NULL == *ppc_read_data_buff)
+            {
+                LOG_ERROR("Error allocating memory for read data buffer: %s", strerror(errno));
+                s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
+                break;
+            }
+
+            memset(*ppc_read_data_buff, 0, *pu64_read_data_size);
+            
+            u64 u64_read_bytes = fread(*ppc_read_data_buff, sizeof(char), *pu64_read_data_size, p_file);
+
+            if (ferror(p_file))
+            {
+                LOG_ERROR("Error reading file: %s", strerror(errno));
+                s32_ret_val = ERROR_FILE_READ_FAILED;
+
+                if (NULL != *ppc_read_data_buff)
+                {
+                    free(*ppc_read_data_buff);
+                    *ppc_read_data_buff = NULL;
                 }
+
+                break;
+            }
+            else if (u64_read_bytes != *pu64_read_data_size)
+            {
+                LOG_ERROR("Read bytes (%lu) do not match expected file size (%lu).", u64_read_bytes, *pu64_read_data_size);
+                s32_ret_val = ERROR_FILE_READ_FAILED;
+
+                if (NULL != *ppc_read_data_buff)
+                {
+                    free(*ppc_read_data_buff);
+                    *ppc_read_data_buff = NULL;
+                }
+
+                break;
             }
             else
             {
-                LOG_ERROR("Read file failed with error code: %d", s32_ret_val);
+                LOG("Read %lu bytes successfully.", *pu64_read_data_size);
+                s32_ret_val = SUCCESS_STATUS;
             }
-        }
+            
+        } while (0);
     }
 
     return s32_ret_val;
 }
-
 
 /**
  * @brief 

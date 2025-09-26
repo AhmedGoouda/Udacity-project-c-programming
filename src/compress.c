@@ -12,15 +12,15 @@
  * 
  * @param[in] pc_input_data Input data to be compressed
  * @param[in] u64_input_data_size Size of the input data
- * @param[in out] pc_output_data Buffer to hold the compressed output data
+ * @param[in out] ppc_output_data Pointer to the buffer that will hold the compressed output data
  * @param[in out] pu64_output_data_size Pointer to hold the size of the compressed data
  * @return s32 SUCCESS_STATUS on success, error code otherwise 
  */
-static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_size, char *pc_output_data, u64 *pu64_output_data_size)
+static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_size, char **ppc_output_data, u64 *pu64_output_data_size)
 {
     s32 s32_ret_val = FAILURE_STATUS;
 
-    if (NULL == pc_input_data || NULL == pc_output_data || NULL == pu64_output_data_size)
+    if (NULL == pc_input_data || NULL == *ppc_output_data || NULL == pu64_output_data_size)
     {
         s32_ret_val = ERROR_NULL_POINTER;
     }
@@ -37,7 +37,7 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
         u64 u64_needed_size = 0; // Variable to hold needed size for realloc checks
         char ac_char_count_str[20] = {0}; // Buffer to hold string representation of count
 
-        char *pc_output_data_shadow = pc_output_data; // Shadow pointer to free in case of realloc failure
+        char *pc_output_data_shadow = *ppc_output_data; // Shadow pointer to free in case of realloc failure
         
         for (u64 i = 0; i < u64_input_data_size; i++)
         {
@@ -49,16 +49,16 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
             {
                 u64_needed_size = u64_write_idx + 2 + sizeof(ac_char_count_str); // 2 for possible escape characters
 
-                if ((u64_needed_size / 2) < UINT32_MAX)
+                if (u64_needed_size + (*pu64_output_data_size) + DATA_CHUNK_SIZE_BYTES < UINT64_MAX)
                 {
                     if (u64_needed_size >= *pu64_output_data_size)
                     {
                         LOG("Reallocating memory for compression buffer.");
 
                         *pu64_output_data_size += DATA_CHUNK_SIZE_BYTES;
-                        pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
+                        *ppc_output_data = (char *)realloc(*ppc_output_data, *pu64_output_data_size);
 
-                        if (NULL == pc_output_data)
+                        if (NULL == *ppc_output_data)
                         {
                             LOG_ERROR("Error reallocating memory for compression buffer: %s", strerror(errno));
                             s32_ret_val == ERROR_MEMORY_ALLOCATION_FAILED;
@@ -77,25 +77,35 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
 
                 if ('\n' == pc_input_data[i])
                 {
-                    pc_output_data[u64_write_idx++] = '\\';
-                    pc_output_data[u64_write_idx++] = 'n';
+                    (*ppc_output_data)[u64_write_idx++] = '\\';
+                    (*ppc_output_data)[u64_write_idx++] = 'n';
+                }
+                else if ('\t' == pc_input_data[i])
+                {
+                    (*ppc_output_data)[u64_write_idx++] = '\\';
+                    (*ppc_output_data)[u64_write_idx++] = 't';
                 }
                 else if (pc_input_data[i] >= '0' && pc_input_data[i] <= '9')
                 {
-                    pc_output_data[u64_write_idx++] = '\\';
-                    pc_output_data[u64_write_idx++] = pc_input_data[i];
+                    (*ppc_output_data)[u64_write_idx++] = '\\';
+                    (*ppc_output_data)[u64_write_idx++] = pc_input_data[i];
+                }
+                else if (pc_input_data[i] == '\\')
+                {
+                    (*ppc_output_data)[u64_write_idx++] = '\\';
+                    (*ppc_output_data)[u64_write_idx++] = '\\';
                 }
                 else
                 {
-                    pc_output_data[u64_write_idx++] = pc_input_data[i];
+                    (*ppc_output_data)[u64_write_idx++] = pc_input_data[i];
                 }
 
                 memset(ac_char_count_str, 0, sizeof(ac_char_count_str));
                 snprintf(ac_char_count_str, sizeof(ac_char_count_str), "%lu", u64_char_count);
 
-                strncpy(&pc_output_data[u64_write_idx], ac_char_count_str, strlen(ac_char_count_str));
+                strncpy(&((*ppc_output_data)[u64_write_idx]), ac_char_count_str, strlen(ac_char_count_str));
                 u64_write_idx += strlen(ac_char_count_str);
-                pc_output_data[u64_write_idx] = '\0';
+                (*ppc_output_data)[u64_write_idx] = '\0';
 
                 u64_char_count = 1;
             }
@@ -111,8 +121,8 @@ static s32 s32_rle_compress(const char *pc_input_data, const u64 u64_input_data_
 
             LOG("Reallocating compression buffer to the actual compressed size.");
 
-            pc_output_data = (char *)realloc(pc_output_data, *pu64_output_data_size);
-            if (NULL == pc_output_data)
+            *ppc_output_data = (char *)realloc(*ppc_output_data, *pu64_output_data_size);
+            if (NULL == *ppc_output_data)
             {
                 LOG_ERROR("Error reallocating memory to the actual compressed size: %s", strerror(errno));
                 s32_ret_val = ERROR_MEMORY_ALLOCATION_FAILED;
@@ -155,7 +165,6 @@ s32 compress(const char *input_file_name)
         u64 u64_raw_data_size = 0;
 
         char *pc_compressed_buff = NULL;
-        u64 u64_max_compressed_size = 0;
         u64 u64_compressed_size = 0;
 
         char ac_input_file_extention[5] = {0};
@@ -172,19 +181,27 @@ s32 compress(const char *input_file_name)
                 break;
             }
 
-            s32_ret_val = open_file(input_file_name, "r", &pf_in_file);
-            ERROR_BREAK(s32_ret_val);
-
-            s32_ret_val = read_file(pf_in_file, &pc_raw_data_buff, &u64_raw_data_size);
-            ERROR_BREAK(s32_ret_val);
-
-            s32_ret_val = close_file(&pf_in_file);
-            ERROR_BREAK(s32_ret_val);
-
-
-            if ((u64_raw_data_size / 2) < UINT32_MAX)
+            if (true == check_file_exists(input_file_name))
             {
-                u64_max_compressed_size = 2 * u64_raw_data_size; // Worst case scenario
+                s32_ret_val = open_file(input_file_name, "r", &pf_in_file);
+                ERROR_BREAK(s32_ret_val);
+
+                s32_ret_val = read_file(pf_in_file, &pc_raw_data_buff, &u64_raw_data_size);
+                ERROR_BREAK(s32_ret_val);
+
+                s32_ret_val = close_file(&pf_in_file);
+                ERROR_BREAK(s32_ret_val);
+            }
+            else
+            {
+                LOG_ERROR("Input file does not exist: %s", input_file_name);
+                s32_ret_val = ERROR_FILE_NOT_FOUND;
+                break;
+            }
+
+            if (u64_raw_data_size <= UINT64_MAX / 2)
+            {
+                u64_compressed_size = 2 * u64_raw_data_size; // Worst case scenario
             }
             else
             {
@@ -193,7 +210,7 @@ s32 compress(const char *input_file_name)
                 break;
             }
 
-            pc_compressed_buff = (char *)malloc(u64_max_compressed_size);
+            pc_compressed_buff = (char *)malloc(u64_compressed_size);
 
             if (NULL == pc_compressed_buff)
             {
@@ -202,7 +219,7 @@ s32 compress(const char *input_file_name)
                 break;
             }
 
-            s32_ret_val = s32_rle_compress(pc_raw_data_buff, u64_raw_data_size, pc_compressed_buff, &u64_compressed_size);
+            s32_ret_val = s32_rle_compress(pc_raw_data_buff, u64_raw_data_size, &pc_compressed_buff, &u64_compressed_size);
             ERROR_BREAK(s32_ret_val);
 
 
@@ -225,24 +242,33 @@ s32 compress(const char *input_file_name)
         // Clean-up
         if (SUCCESS_STATUS != s32_ret_val)
         {
+            // Save the error code before clean-up
+            s32 s32_err = s32_ret_val;
+
             LOG_ERROR("Exit compression loop with error code: %d", s32_ret_val);
 
             if (NULL != pf_in_file)
             {
                 s32_ret_val = close_file(&pf_in_file);
-                LOG_INFO("Close pf_in_file: %d", s32_ret_val);
+                LOG_INFO("Close Input File: %d", s32_ret_val);
             }
 
             if (NULL != pf_out_file)
             {
                 s32_ret_val = close_file(&pf_out_file);
-                LOG_INFO("Close pf_out_file: %d", s32_ret_val);
+                LOG_INFO("Close Output File: %d", s32_ret_val);
             }
 
-            if (true == check_file_exists(pc_out_file_path))
+            if (NULL != pc_out_file_path)
             {
-                s32_ret_val = delete_file(pc_out_file_path);
+                if (true == check_file_exists(pc_out_file_path))
+                {
+                    s32_ret_val = delete_file(pc_out_file_path);
+                }
             }
+
+            // Restore the original error code
+            s32_ret_val = s32_err;
         }
 
         // Free allocated memory

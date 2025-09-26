@@ -3,8 +3,11 @@
 
 #include <stdio.h>
 
+#define ONE_KB_SIZE_BYTES       (1024u)
+#define ONE_MB_SIZE_BYTES       (1024u * 1024u) 
 
-#define DATA_CHUNK_SIZE_BYTES    (512u)
+// Define chunk size for compression/decompression operations
+#define DATA_CHUNK_SIZE_BYTES   ONE_MB_SIZE_BYTES
 
 // enumeration for error codes
 typedef enum 
@@ -13,8 +16,8 @@ typedef enum
     FAILURE_STATUS = -99,
     ERROR_INVALID_ARGUMENTS,
     ERROR_INVALID_LENGTH,
+    ERROR_INVALID_DATA,
     ERROR_NULL_POINTER,
-    ERROR_RESET_FILE_POINTER,
     ERROR_EMPTY_FILE,
     ERROR_FILE_NOT_FOUND,
     ERROR_FILE_NOT_OPENED,
